@@ -344,7 +344,11 @@
 </div>
 <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
 
-<script type="module">
+<!-- Firebase compat SDK (ไม่ต้องใช้ import) -->
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
 const SALARY = 53475.57;
 const PIN = 3000;
 const TOTAL_INCOME = SALARY + PIN;
@@ -404,12 +408,9 @@ let momKept   = { total: 0, months: {} };
 let selfKept  = { total: 0, months: {} };
 let keptExtras = [];
 
-// ── Firebase setup ──────────────────────────────────────────
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
+// ── Firebase (loaded via compat CDN — ไม่ต้องใช้ import) ────
 const firebaseConfig = {
-  apiKey: "AIzaSyB3q_nkLUGApO9eaebra07rdkmqnL_FCY4",
+  apiKey: "AIzaSyAXt_cX8VvcYhA1nZJWR7rEByFoZCg8X48",
   authDomain: "my-budget-9aa20.firebaseapp.com",
   databaseURL: "https://my-budget-9aa20-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "my-budget-9aa20",
@@ -418,24 +419,22 @@ const firebaseConfig = {
   appId: "1:692201225184:web:4b4461a2aaedb508f78985"
 };
 
-const firebaseApp = initializeApp(firebaseConfig);
-const db = getDatabase(firebaseApp);
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
 const DB_KEY = 'budget_data';
 
 let _saveTimer = null;
 function saveData() {
-  // debounce 800ms เพื่อไม่ให้ write บ่อยเกิน
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     const payload = { paidStatus, logs, creditAmounts, notes, aiaKept, momKept, selfKept, keptExtras };
-    set(ref(db, DB_KEY), payload).catch(err => console.error('Firebase save error:', err));
+    db.ref(DB_KEY).set(payload).catch(err => console.error('Firebase save error:', err));
   }, 800);
 }
 
 function loadData() {
-  // แสดง loading
   document.getElementById('loadingOverlay').style.display = 'flex';
-  onValue(ref(db, DB_KEY), (snapshot) => {
+  db.ref(DB_KEY).on('value', (snapshot) => {
     const data = snapshot.val();
     if (data) {
       paidStatus    = data.paidStatus    || {};
