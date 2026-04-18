@@ -555,6 +555,7 @@ function loadLocal() {
 let _saveTimer = null;
 function saveData() {
   saveLocal();
+  if (!db) return;
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     db.ref(DB_KEY).set(getPayload()).catch(() => {});
@@ -562,15 +563,14 @@ function saveData() {
 }
 
 function loadData() {
-  // แสดงผลจาก local ทันที ไม่รอ Firebase
   applyPayload(loadLocal());
   document.getElementById('loadingOverlay').style.display = 'none';
   renderAll();
-  // sync Firebase ใน background
+  if (!db) return;
   db.ref(DB_KEY).on('value', snap => {
     const d = snap.val();
     if (d) { applyPayload(d); saveLocal(); renderAll(); }
-  }, () => {}); // ถ้า Firebase ล้มเหลว ไม่ทำอะไร
+  }, () => {});
 }
 
 function renderAll() {
