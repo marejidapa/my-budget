@@ -122,9 +122,15 @@
   .progress-fill.over { background: var(--danger); }
   .progress-labels { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--muted); margin-bottom: 16px; }
   .log-form { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
-  .log-form input { flex: 1; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 10px; font-family: 'Sarabun', sans-serif; font-size: 0.85rem; background: var(--bg); color: var(--text); outline: none; min-width: 80px; }
-  .log-form input:focus { border-color: var(--accent); }
+  .log-form input, .log-form select { flex: 1; padding: 10px 12px; border: 1.5px solid var(--border); border-radius: 10px; font-family: 'Sarabun', sans-serif; font-size: 0.85rem; background: var(--bg); color: var(--text); outline: none; min-width: 80px; }
+  .log-form input:focus, .log-form select:focus { border-color: var(--accent); }
   .log-form input.amt { width: 90px; flex: none; }
+  .log-form select.cat { width: 120px; flex: none; cursor: pointer; }
+  .log-cat-badge { font-size: 0.68rem; padding: 2px 7px; border-radius: 8px; font-weight: 600; display: inline-block; }
+  .log-cat-badge.food { background: #fef3c7; color: #92400e; }
+  .log-cat-badge.cloth { background: #ede9fe; color: #5b21b6; }
+  .log-cat-badge.travel { background: #e0f2fe; color: #0369a1; }
+  .log-cat-badge.other { background: #f0ebe4; color: var(--muted); }
   .log-btn { padding: 10px 14px; background: var(--accent); color: white; border: none; border-radius: 10px; font-family: 'Sarabun', sans-serif; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
   .log-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
   .log-item:last-child { border-bottom: none; }
@@ -264,6 +270,12 @@
 
     <div class="log-form">
       <input type="text" id="logDesc" placeholder="รายการ เช่น ข้าวกลางวัน" />
+      <select id="logCat" class="cat">
+        <option value="food">🍜 อาหาร</option>
+        <option value="cloth">👗 เสื้อผ้า/ของใช้</option>
+        <option value="travel">🚗 เดินทาง</option>
+        <option value="other">🛍️ อื่นๆ</option>
+      </select>
       <input type="number" id="logAmt" class="amt" placeholder="฿" min="0" />
       <button class="log-btn" onclick="addLog()">+ เพิ่ม</button>
     </div>
@@ -423,33 +435,67 @@ firebase.initializeApp(firebaseConfig);
 const db = firebase.database();
 const DB_KEY = 'budget_data';
 
+const LS_KEY = 'budget_data_local';
+
+function applyData(data) {
+  if (!data) return;
+  paidStatus    = data.paidStatus    || {};
+  logs          = data.logs          || {};
+  creditAmounts = data.creditAmounts || {};
+  notes         = data.notes         || [];
+  aiaKept       = data.aiaKept       || { total: 0, months: {} };
+  momKept       = data.momKept       || { total: 0, months: {} };
+  selfKept      = data.selfKept      || { total: 0, months: {} };
+  keptExtras    = data.keptExtras    || [];
+}
+
+function saveToLocalStorage(payload) {
+  try { localStorage.setItem(LS_KEY, JSON.stringify(payload)); } catch(e) {}
+}
+
+function loadFromLocalStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch(e) { return null; }
+}
+
 let _saveTimer = null;
 function saveData() {
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
     const payload = { paidStatus, logs, creditAmounts, notes, aiaKept, momKept, selfKept, keptExtras };
-    db.ref(DB_KEY).set(payload).catch(err => console.error('Firebase save error:', err));
+    saveToLocalStorage(payload);
+    db.ref(DB_KEY).set(payload).catch(err => console.warn('Firebase save error (offline?):', err));
   }, 800);
 }
 
 function loadData() {
   document.getElementById('loadingOverlay').style.display = 'flex';
-  db.ref(DB_KEY).on('value', (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      paidStatus    = data.paidStatus    || {};
-      logs          = data.logs          || {};
-      creditAmounts = data.creditAmounts || {};
-      notes         = data.notes         || [];
-      aiaKept       = data.aiaKept       || { total: 0, months: {} };
-      momKept       = data.momKept       || { total: 0, months: {} };
-      selfKept      = data.selfKept      || { total: 0, months: {} };
-      keptExtras    = data.keptExtras    || [];
-    }
+
+  // Preload from localStorage immediately so UI shows instantly
+  const local = loadFromLocalStorage();
+  if (local) {
+    applyData(local);
     document.getElementById('loadingOverlay').style.display = 'none';
     renderTracker();
     renderKeptCard();
-  }, { onlyOnce: false }); // real-time sync
+  }
+
+  // Then sync with Firebase (real-time)
+  db.ref(DB_KEY).on('value', (snapshot) => {
+    const data = snapshot.val();
+    applyData(data);
+    saveToLocalStorage({ paidStatus, logs, creditAmounts, notes, aiaKept, momKept, selfKept, keptExtras });
+    document.getElementById('loadingOverlay').style.display = 'none';
+    renderTracker();
+    renderKeptCard();
+  }, (err) => {
+    // Firebase offline — use localStorage data already loaded above
+    console.warn('Firebase unavailable, using local data:', err);
+    document.getElementById('loadingOverlay').style.display = 'none';
+    if (!local) { renderTracker(); renderKeptCard(); }
+  });
 }
 
 function monthKey(m) { return '2026_' + m; }
@@ -746,11 +792,12 @@ function getMonthLogs(m) { return logs[monthKey(m)] || []; }
 function addLog() {
   const desc = document.getElementById('logDesc').value.trim();
   const amt = parseFloat(document.getElementById('logAmt').value);
+  const cat = document.getElementById('logCat').value;
   if (!desc || !amt || amt <= 0) { alert('กรุณากรอกรายการและจำนวนเงินค่ะ'); return; }
   const m = currentLogMonth;
   if (!logs[monthKey(m)]) logs[monthKey(m)] = [];
   logs[monthKey(m)].push({
-    id: Date.now(), desc, amt,
+    id: Date.now(), desc, amt, cat,
     date: new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
   });
   document.getElementById('logDesc').value = '';
@@ -786,14 +833,21 @@ function renderLog() {
     listEl.innerHTML = '<div class="empty-log">ยังไม่มีรายการ<br>กดเพิ่มรายการด้านบนได้เลยค่ะ</div>';
     return;
   }
+  const catMeta = {
+    food:   { label: '🍜 อาหาร',        cls: 'food' },
+    cloth:  { label: '👗 เสื้อผ้า/ของใช้', cls: 'cloth' },
+    travel: { label: '🚗 เดินทาง',       cls: 'travel' },
+    other:  { label: '🛍️ อื่นๆ',         cls: 'other' },
+  };
   listEl.innerHTML = '';
   [...items].reverse().forEach(l => {
+    const meta = catMeta[l.cat] || catMeta.other;
     const div = document.createElement('div');
     div.className = 'log-item';
     div.innerHTML = `
       <button class="log-del" onclick="delLog(${m},${l.id})">×</button>
       <div class="log-desc">
-        <div>${l.desc}</div>
+        <div>${escapeHtml(l.desc)} <span class="log-cat-badge ${meta.cls}">${meta.label}</span></div>
         <div class="log-date">${l.date}</div>
       </div>
       <div class="log-amt">-${fmt(l.amt)}</div>`;
