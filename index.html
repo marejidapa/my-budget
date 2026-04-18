@@ -195,6 +195,21 @@
   .prog-bar { height: 3px; background: rgba(255,255,255,0.15); border-radius: 2px; margin-top: 5px; width: 130px; overflow: hidden; }
   .prog-fill { height: 100%; background: var(--accent2); border-radius: 2px; transition: width 0.4s; }
 
+  /* PIN SCREEN */
+  .pin-screen { position:fixed; inset:0; background:var(--bg); z-index:9998; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:2rem; }
+  .pin-screen h2 { font-family:'Prompt',sans-serif; font-size:1.3rem; font-weight:700; color:var(--accent); margin-bottom:6px; }
+  .pin-screen p { font-size:0.82rem; color:var(--muted); margin-bottom:2rem; }
+  .pin-dots { display:flex; gap:12px; margin-bottom:2rem; }
+  .pin-dot { width:14px; height:14px; border-radius:50%; border:2px solid var(--border); background:white; transition:all 0.15s; }
+  .pin-dot.filled { background:var(--accent); border-color:var(--accent); }
+  .pin-pad { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; width:240px; }
+  .pin-key { height:60px; border-radius:14px; border:1.5px solid var(--border); background:white; font-family:'Prompt',sans-serif; font-size:1.2rem; font-weight:500; color:var(--text); cursor:pointer; transition:all 0.15s; box-shadow:var(--shadow); }
+  .pin-key:active { transform:scale(0.94); background:var(--accent); color:white; }
+  .pin-key.del { font-size:1rem; color:var(--muted); }
+  .pin-error { color:var(--danger); font-size:0.8rem; margin-top:1rem; min-height:1.2rem; text-align:center; }
+  @keyframes shake { 0%,100%{transform:translateX(0)} 20%,60%{transform:translateX(-8px)} 40%,80%{transform:translateX(8px)} }
+  .shake { animation:shake 0.35s ease; }
+
   @keyframes pop { 0%{transform:scale(0.96)} 60%{transform:scale(1.02)} 100%{transform:scale(1)} }
   .popping { animation: pop 0.25s ease; }
   @keyframes fadeIn { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
@@ -202,6 +217,38 @@
 </style>
 </head>
 <body>
+
+<!-- PIN SCREEN -->
+<div class="pin-screen" id="pinScreen">
+  <h2>💰 บัญชีรายเดือน</h2>
+  <p>กรุณาใส่ PIN เพื่อเข้าใช้งาน</p>
+  <div class="pin-dots" id="pinDots">
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+    <div class="pin-dot"></div>
+  </div>
+  <div class="pin-pad">
+    <button class="pin-key" onclick="pinPress('1')">1</button>
+    <button class="pin-key" onclick="pinPress('2')">2</button>
+    <button class="pin-key" onclick="pinPress('3')">3</button>
+    <button class="pin-key" onclick="pinPress('4')">4</button>
+    <button class="pin-key" onclick="pinPress('5')">5</button>
+    <button class="pin-key" onclick="pinPress('6')">6</button>
+    <button class="pin-key" onclick="pinPress('7')">7</button>
+    <button class="pin-key" onclick="pinPress('8')">8</button>
+    <button class="pin-key" onclick="pinPress('9')">9</button>
+    <button class="pin-key" style="visibility:hidden"></button>
+    <button class="pin-key" onclick="pinPress('0')">0</button>
+    <button class="pin-key del" onclick="pinDel()">⌫</button>
+  </div>
+  <div class="pin-error" id="pinError"></div>
+</div>
+
+<!-- MAIN APP (hidden until PIN correct) -->
+<div id="mainApp" style="display:none">
 
 <header>
   <h1>💰 บัญชีรายเดือน</h1>
@@ -351,6 +398,8 @@
   </div>
 </div>
 
+</div><!-- /mainApp -->
+
 <div id="loadingOverlay" style="display:none;position:fixed;inset:0;background:rgba(247,243,238,0.92);z-index:9999;flex-direction:column;align-items:center;justify-content:center;gap:12px">
   <div style="width:36px;height:36px;border:3px solid #e2d9ce;border-top-color:#c8863a;border-radius:50%;animation:spin 0.8s linear infinite"></div>
   <div style="font-family:'Sarabun',sans-serif;font-size:0.9rem;color:#8a7a6a">กำลังโหลดข้อมูล...</div>
@@ -360,6 +409,58 @@
 <!-- Firebase compat SDK (ไม่ต้องใช้ import) -->
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+
+<script>
+// ═══════════════════════════════════════════════
+//  PIN LOGIC
+// ═══════════════════════════════════════════════
+const CORRECT_PIN = '180832';
+let pinInput = '';
+
+function updatePinDots() {
+  document.querySelectorAll('.pin-dot').forEach((dot, i) => {
+    dot.classList.toggle('filled', i < pinInput.length);
+  });
+}
+
+function pinPress(num) {
+  if (pinInput.length >= 6) return;
+  pinInput += num;
+  updatePinDots();
+  if (pinInput.length === 6) {
+    setTimeout(checkPin, 150);
+  }
+}
+
+function pinDel() {
+  pinInput = pinInput.slice(0, -1);
+  updatePinDots();
+  document.getElementById('pinError').textContent = '';
+}
+
+function checkPin() {
+  if (pinInput === CORRECT_PIN) {
+    // บันทึกว่า unlock แล้ว (session เท่านั้น)
+    sessionStorage.setItem('pinOk', '1');
+    document.getElementById('pinScreen').style.display = 'none';
+    document.getElementById('mainApp').style.display = 'block';
+    loadData();
+  } else {
+    pinInput = '';
+    updatePinDots();
+    const dots = document.getElementById('pinDots');
+    dots.classList.add('shake');
+    setTimeout(() => dots.classList.remove('shake'), 400);
+    document.getElementById('pinError').textContent = 'PIN ไม่ถูกต้อง ลองใหม่อีกครั้งค่ะ';
+  }
+}
+
+// ถ้า unlock แล้วในช่วง session เดียวกัน ไม่ต้องกรอก PIN ซ้ำ
+if (sessionStorage.getItem('pinOk') === '1') {
+  document.getElementById('pinScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+}
+</script>
 
 <script>
 // ═══════════════════════════════════════════════
@@ -377,7 +478,6 @@ const expenses = [
   { id:'condo',    name:'ค่าคอนโด',               amount:8300,        cat:'fix',    tag:'fix',    note:'ปิ๊นช่วย ฿3,000 แล้ว', icon:'🏠', isEditable:true },
   { id:'mom',      name:'ค่าขนมแม่',              amount:500,         cat:'fix',    tag:'fix',    note:'', icon:'💝' },
   { id:'dad_ins',  name:'ค่าประกันพ่อ',           amount:463,         cat:'fix',    tag:'fix',    note:'', icon:'🛡️' },
-  { id:'mom_ins',  name:'ค่าประกันแม่',           amount:1800,        cat:'fix',    tag:'fix',    note:'ยอดเต็ม ฿21,600/ปี — โอนเข้า Kept', icon:'🛡️' },
   { id:'common',   name:'ค่าส่วนกลาง + น้ำ',      amount:1328.50,     cat:'fix',    tag:'fix',    note:'', icon:'🏢' },
   { id:'electric', name:'ค่าไฟคอนโด',             amount:300,         cat:'fix',    tag:'fix',    note:'', icon:'⚡' },
   { id:'net',      name:'ค่าเน็ตคอนโด',           amount:535,         cat:'fix',    tag:'fix',    note:'', icon:'📶' },
@@ -385,13 +485,11 @@ const expenses = [
   { id:'phone',    name:'ค่าโทรศัพท์',            amount:430,         cat:'fix',    tag:'fix',    note:'', icon:'📱' },
   { id:'nanny',    name:'ค่าพี่เลี้ยง',           amount:6000,        cat:'fix',    tag:'fix',    note:'', icon:'👶' },
   { id:'kid',      name:'ค่าของลูก',              amount:2000,        cat:'fix',    tag:'fix',    note:'', icon:'🧸' },
-  { id:'aia',      name:'ประกัน AIA (ตัวเอง)',    amount:AIA_MONTHLY, cat:'aia',    tag:'aia',    note:'โอนเข้า Kept จ่ายธ.ค.ทุกปี', icon:'🔐' },
   { id:'emerg',    name:'เงินกองกลาง',            amount:1500,        cat:'save',   tag:'refund', note:'สำรองฉุกเฉิน', icon:'🏦' },
   { id:'abroad',   name:'เก็บไปต่างประเทศ',       amount:2000,        cat:'save',   tag:'save',   note:'', icon:'✈️' },
   { id:'local',    name:'เที่ยวในประเทศ',         amount:2000,        cat:'save',   tag:'save',   note:'', icon:'🗺️' },
-  { id:'self',     name:'ออมเพื่อคืนตัวเอง',     amount:3500,        cat:'save',   tag:'refund', note:'โอนเข้า Kept — ถึงมิ.ย. 2026', icon:'💎' },
   { id:'kanom',    name:'ค่าขนม / ใช้จ่ายส่วนตัว', amount:15000,     cat:'save',   tag:'save',   note:'', icon:'🛍️' },
-  { id:'extra',    name:'ออมเพิ่ม',               amount:2000,        cat:'save',   tag:'save',   note:'', icon:'📈' },
+  { id:'extra',    name:'ออมเพิ่ม',               amount:2000,        cat:'save',   tag:'save',   note:'', icon:'📈', isEditable:true },
   { id:'cc_red',   name:'บัตร Central (แดง)',     amount:0,           cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
   { id:'cc_fc',    name:'บัตร First Choice',      amount:0,           cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
   { id:'cc_hp',    name:'บัตร HomePro',           amount:0,           cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
@@ -407,6 +505,7 @@ let paidStatus = {}, logs = {}, creditAmounts = {}, notes = [], keptExtras = [];
 let aiaKept  = { total:0, months:{} };
 let momKept  = { total:0, months:{} };
 let selfKept = { total:0, months:{} };
+let keptDisabled = {}; // เก็บว่ารายการไหนถูกปิดอยู่
 
 // ═══════════════════════════════════════════════
 //  FIREBASE + LOCAL STORAGE
@@ -432,7 +531,7 @@ try {
 } catch(e) { db = null; }
 
 function getPayload() {
-  return { paidStatus, logs, creditAmounts, notes, aiaKept, momKept, selfKept, keptExtras };
+  return { paidStatus, logs, creditAmounts, notes, aiaKept, momKept, selfKept, keptExtras, keptDisabled };
 }
 function applyPayload(d) {
   if (!d) return;
@@ -444,6 +543,7 @@ function applyPayload(d) {
   momKept       = d.momKept       || { total:0, months:{} };
   selfKept      = d.selfKept      || { total:0, months:{} };
   keptExtras    = Array.isArray(d.keptExtras) ? d.keptExtras : [];
+  keptDisabled  = d.keptDisabled  || {};
 }
 function saveLocal() {
   try { localStorage.setItem('bud_local', JSON.stringify(getPayload())); } catch(e) {}
@@ -675,34 +775,50 @@ function delKeptExtra(id) {
   saveData(); renderKeptCard();
 }
 
+function toggleKeptDisabled(id) {
+  keptDisabled[id] = !keptDisabled[id];
+  saveData();
+  renderKeptCard();
+}
+
 function renderKeptCard() {
   const c = document.getElementById('keptCard');
   if (!c) return;
   const m = currentMonth;
-  const grandTotal = KEPT_FIXED.reduce((s,k)=>s+k.monthly,0) + keptExtras.reduce((s,k)=>s+k.amount,0);
+  const grandTotal = KEPT_FIXED.filter(k=>!keptDisabled[k.id]).reduce((s,k)=>s+k.monthly,0)
+                   + keptExtras.reduce((s,k)=>s+k.amount,0);
 
   const rows = KEPT_FIXED.map(k => {
+    const disabled = !!keptDisabled[k.id];
     const sv = k.store().total || 0;
     const pct = Math.min(100, Math.round(sv / k.annual * 100));
     const paid = isPaid(m, k.id);
-    return `<div class="kept-item-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:10px 0">
+    return `<div class="kept-item-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:10px 0;${disabled?'opacity:0.45':''}">
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
         <div style="display:flex;align-items:center;gap:10px;flex:1">
-          <button onclick="toggleKeptFromCard('${k.id}')"
-            style="flex-shrink:0;width:28px;height:28px;border-radius:50%;border:2.5px solid ${paid?'#4caf82':'#e2d9ce'};
-            background:${paid?'#4caf82':'#f0ebe4'};color:white;font-size:13px;cursor:pointer;
+          <button onclick="${disabled?'':''} toggleKeptFromCard('${k.id}')" ${disabled?'disabled':''}
+            style="flex-shrink:0;width:28px;height:28px;border-radius:50%;border:2.5px solid ${paid&&!disabled?'#4caf82':'#e2d9ce'};
+            background:${paid&&!disabled?'#4caf82':'#f0ebe4'};color:white;font-size:13px;cursor:${disabled?'default':'pointer'};
             display:flex;align-items:center;justify-content:center;transition:all 0.2s">
-            ${paid?'✓':''}
+            ${paid&&!disabled?'✓':''}
           </button>
-          <div>
-            <div style="font-size:0.85rem;font-weight:600;color:${paid?'#4caf82':'var(--text)'}">${k.name}</div>
+          <div style="flex:1">
+            <div style="font-size:0.85rem;font-weight:600;color:${paid&&!disabled?'#4caf82':'var(--text)'}">${k.name}</div>
             <div style="font-size:0.68rem;color:#b45309">📌 ${k.note}</div>
           </div>
         </div>
-        <span class="kept-item-amt" style="color:${paid?'#4caf82':'#92400e'}">${fmt(k.monthly)}<span style="font-size:0.65rem;color:#b45309">/เดือน</span></span>
+        <div style="display:flex;align-items:center;gap:8px">
+          ${!disabled?`<span class="kept-item-amt" style="color:#92400e">${fmt(k.monthly)}<span style="font-size:0.65rem;color:#b45309">/เดือน</span></span>`:''}
+          <button onclick="toggleKeptDisabled('${k.id}')"
+            style="font-size:0.7rem;padding:3px 8px;border-radius:8px;border:1px solid ${disabled?'#10b981':'#e2d9ce'};
+            background:${disabled?'#d8f3dc':'transparent'};color:${disabled?'#2d6a4f':'#8a7a6a'};cursor:pointer;white-space:nowrap">
+            ${disabled?'เปิด':'ปิด'}
+          </button>
+        </div>
       </div>
+      ${!disabled?`
       <div class="kept-bar-wrap" style="margin:4px 0 2px"><div class="kept-bar-fill" style="width:${pct}%;background:${k.color}"></div></div>
-      <div style="font-size:0.65rem;color:#b45309;text-align:right">${fmt(sv)} / ${fmt(k.annual)} (${pct}%)</div>
+      <div style="font-size:0.65rem;color:#b45309;text-align:right">${fmt(sv)} / ${fmt(k.annual)} (${pct}%)</div>`:''}
     </div>`;
   }).join('');
 
@@ -885,7 +1001,9 @@ document.getElementById('logAmt').addEventListener('keydown',  e=>{ if(e.key==='
 document.getElementById('logDesc').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('logAmt').focus(); });
 document.getElementById('noteText').addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.ctrlKey) addNote(); });
 
-loadData();
+// loadData() จะถูกเรียกหลัง PIN ถูกต้อง
+// แต่ถ้า session ยังอยู่ (pinOk) ให้โหลดเลย
+if (sessionStorage.getItem('pinOk') === '1') loadData();
 </script>
 </body>
 </html>
