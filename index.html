@@ -133,6 +133,13 @@
   .log-date { font-size: 0.7rem; color: var(--muted); }
   .log-amt { font-family: 'Prompt', sans-serif; font-size: 0.9rem; font-weight: 700; color: var(--danger); }
   .empty-log { text-align: center; color: var(--muted); font-size: 0.82rem; padding: 20px 0; }
+  .cat-btn { padding: 5px 11px; border-radius: 20px; border: 1.5px solid var(--border); background: white; font-family: 'Sarabun', sans-serif; font-size: 0.75rem; font-weight: 600; color: var(--muted); cursor: pointer; transition: all 0.15s; white-space: nowrap; }
+  .cat-btn.active { background: var(--accent); color: white; border-color: var(--accent); }
+  .log-cat-tag { font-size: 0.65rem; padding: 1px 6px; border-radius: 8px; font-weight: 600; display: inline-block; margin-top: 2px; }
+  .log-cat-tag.food    { background: #fef3e2; color: #92400e; }
+  .log-cat-tag.clothes { background: #fce7f3; color: #9d174d; }
+  .log-cat-tag.travel  { background: #e0edf8; color: #1e3a5f; }
+  .log-cat-tag.other   { background: #f0ebe4; color: #6b6860; }
 
   /* NOTES PAGE */
   .notes-header { font-family: 'Prompt', sans-serif; font-size: 1rem; font-weight: 700; color: var(--accent); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
@@ -267,6 +274,12 @@
       <input type="number" id="logAmt" class="amt" placeholder="฿" min="0" />
       <button class="log-btn" onclick="addLog()">+ เพิ่ม</button>
     </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px" id="catBtns">
+      <button class="cat-btn active" data-cat="food"    onclick="selectCat('food')"   >🍜 ค่าอาหาร</button>
+      <button class="cat-btn"        data-cat="clothes" onclick="selectCat('clothes')" >👗 เสื้อผ้า/ของใช้</button>
+      <button class="cat-btn"        data-cat="travel"  onclick="selectCat('travel')"  >🚗 ค่าเดินทาง</button>
+      <button class="cat-btn"        data-cat="other"   onclick="selectCat('other')"   >🛍️ อื่นๆ/เผื่อ</button>
+    </div>
 
     <div id="logList"><div class="empty-log">ยังไม่มีรายการ<br>กดเพิ่มรายการด้านบนได้เลยค่ะ</div></div>
   </div>
@@ -349,66 +362,55 @@
 <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
 
 <script>
-const SALARY = 53475.57;
-const PIN = 3000;
+// ═══════════════════════════════════════════════
+//  CONSTANTS
+// ═══════════════════════════════════════════════
+const SALARY = 53475.57, PIN = 3000;
 const TOTAL_INCOME = SALARY + PIN;
 const KANOM_BUDGET = 15000;
-const AIA_MONTHLY = 2268.18;       // ประกัน AIA ตัวเอง
-const AIA_ANNUAL = AIA_MONTHLY * 12;
-const MOM_INS_MONTHLY = 1800;      // ประกันแม่
-const MOM_INS_ANNUAL = 21600;
-const SELF_MONTHLY = 3500;         // ออมคืนตัวเอง
-const SELF_TARGET = 35000;         // เป้าหมายรวม
-const SELF_END_MONTH = 5;          // มิ.ย. = index 5
-const SELF_END_YEAR = 2026;
-const CURRENT_MONTH = 3;           // เม.ย. 2026 = index 3
+const AIA_MONTHLY = 2268.18, AIA_ANNUAL = AIA_MONTHLY * 12;
+const MOM_INS_MONTHLY = 1800, MOM_INS_ANNUAL = 21600;
+const SELF_MONTHLY = 3500, SELF_TARGET = 35000;
 const MONTHS = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-const MONTHS_FULL = ['มกราคม','กุมภาพันธ์','มีนาคม','เมษายน','พฤษภาคม','มิถุนายน','กรกฎาคม','สิงหาคม','กันยายน','ตุลาคม','พฤศจิกายน','ธันวาคม'];
 
 const expenses = [
-  // Fix cost
-  { id:'condo',    name:'ค่าคอนโด',                    amount:8300,    cat:'fix',    tag:'fix',    note:'ปิ๊นช่วย ฿3,000 แล้ว', icon:'🏠' },
-  { id:'mom',      name:'ค่าขนมแม่',                   amount:500,     cat:'fix',    tag:'fix',    note:'', icon:'💝' },
-  { id:'dad_ins',  name:'ค่าประกันพ่อ',                amount:463,     cat:'fix',    tag:'fix',    note:'', icon:'🛡️' },
-  { id:'mom_ins',  name:'ค่าประกันแม่',                amount:1800,    cat:'fix',    tag:'fix',    note:'ยอดเต็ม ฿21,600/ปี', icon:'🛡️' },
-  { id:'common',   name:'ค่าส่วนกลาง + น้ำ',           amount:1328.50, cat:'fix',    tag:'fix',    note:'', icon:'🏢' },
-  { id:'electric', name:'ค่าไฟคอนโด',                  amount:300,     cat:'fix',    tag:'fix',    note:'', icon:'⚡' },
-  { id:'net',      name:'ค่าเน็ตคอนโด',                amount:535,     cat:'fix',    tag:'fix',    note:'', icon:'📶' },
-  { id:'netflix',  name:'Netflix',                      amount:145,     cat:'fix',    tag:'fix',    note:'', icon:'🎬' },
-  { id:'phone',    name:'ค่าโทรศัพท์',                 amount:430,     cat:'fix',    tag:'fix',    note:'', icon:'📱' },
-  { id:'nanny',    name:'ค่าพี่เลี้ยง',                amount:6000,    cat:'fix',    tag:'fix',    note:'', icon:'👶' },
-  { id:'kid',      name:'ค่าของลูก',                   amount:2000,    cat:'fix',    tag:'fix',    note:'', icon:'🧸' },
-  // AIA
-  { id:'aia',      name:'ประกัน AIA',                  amount:AIA_MONTHLY, cat:'aia', tag:'aia',  note:'โอนเข้า Kept เพื่อจ่ายปีละครั้ง', icon:'💰' },
-  // Save
-  { id:'emerg',    name:'เงินกองกลาง',                 amount:1500,    cat:'save',   tag:'refund', note:'สำรองฉุกเฉิน', icon:'🏦' },
-  { id:'abroad',   name:'เก็บไปต่างประเทศ',            amount:2000,    cat:'save',   tag:'save',   note:'', icon:'✈️' },
-  { id:'local',    name:'เที่ยวในประเทศ',              amount:2000,    cat:'save',   tag:'save',   note:'', icon:'🗺️' },
-  { id:'self',     name:'ออมเพื่อคืนตัวเอง',          amount:3500,    cat:'save',   tag:'refund', note:'ออมถึง มิ.ย. 2026 | ยอดเต็ม ฿35,000', icon:'💎' },
-  { id:'kanom',    name:'ค่าขนม / ใช้จ่ายส่วนตัว',    amount:15000,   cat:'save',   tag:'save',   note:'', icon:'🛍️' },
-  { id:'extra',    name:'ออมเพิ่ม',                    amount:2000,    cat:'save',   tag:'save',   note:'', icon:'📈' },
-  // Credit (variable)
-  { id:'cc_red',   name:'บัตร Central (แดง)',          amount:0,       cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
-  { id:'cc_fc',    name:'บัตร First Choice',           amount:0,       cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
-  { id:'cc_hp',    name:'บัตร HomePro',                amount:0,       cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
-  { id:'cc_gray',  name:'บัตร Central (เทา)',          amount:0,       cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
+  { id:'condo',    name:'ค่าคอนโด',               amount:8300,        cat:'fix',    tag:'fix',    note:'ปิ๊นช่วย ฿3,000 แล้ว', icon:'🏠', isEditable:true },
+  { id:'mom',      name:'ค่าขนมแม่',              amount:500,         cat:'fix',    tag:'fix',    note:'', icon:'💝' },
+  { id:'dad_ins',  name:'ค่าประกันพ่อ',           amount:463,         cat:'fix',    tag:'fix',    note:'', icon:'🛡️' },
+  { id:'mom_ins',  name:'ค่าประกันแม่',           amount:1800,        cat:'fix',    tag:'fix',    note:'ยอดเต็ม ฿21,600/ปี — โอนเข้า Kept', icon:'🛡️' },
+  { id:'common',   name:'ค่าส่วนกลาง + น้ำ',      amount:1328.50,     cat:'fix',    tag:'fix',    note:'', icon:'🏢' },
+  { id:'electric', name:'ค่าไฟคอนโด',             amount:300,         cat:'fix',    tag:'fix',    note:'', icon:'⚡' },
+  { id:'net',      name:'ค่าเน็ตคอนโด',           amount:535,         cat:'fix',    tag:'fix',    note:'', icon:'📶' },
+  { id:'netflix',  name:'Netflix',                 amount:145,         cat:'fix',    tag:'fix',    note:'', icon:'🎬' },
+  { id:'phone',    name:'ค่าโทรศัพท์',            amount:430,         cat:'fix',    tag:'fix',    note:'', icon:'📱' },
+  { id:'nanny',    name:'ค่าพี่เลี้ยง',           amount:6000,        cat:'fix',    tag:'fix',    note:'', icon:'👶' },
+  { id:'kid',      name:'ค่าของลูก',              amount:2000,        cat:'fix',    tag:'fix',    note:'', icon:'🧸' },
+  { id:'aia',      name:'ประกัน AIA (ตัวเอง)',    amount:AIA_MONTHLY, cat:'aia',    tag:'aia',    note:'โอนเข้า Kept จ่ายธ.ค.ทุกปี', icon:'🔐' },
+  { id:'emerg',    name:'เงินกองกลาง',            amount:1500,        cat:'save',   tag:'refund', note:'สำรองฉุกเฉิน', icon:'🏦' },
+  { id:'abroad',   name:'เก็บไปต่างประเทศ',       amount:2000,        cat:'save',   tag:'save',   note:'', icon:'✈️' },
+  { id:'local',    name:'เที่ยวในประเทศ',         amount:2000,        cat:'save',   tag:'save',   note:'', icon:'🗺️' },
+  { id:'self',     name:'ออมเพื่อคืนตัวเอง',     amount:3500,        cat:'save',   tag:'refund', note:'โอนเข้า Kept — ถึงมิ.ย. 2026', icon:'💎' },
+  { id:'kanom',    name:'ค่าขนม / ใช้จ่ายส่วนตัว', amount:15000,     cat:'save',   tag:'save',   note:'', icon:'🛍️' },
+  { id:'extra',    name:'ออมเพิ่ม',               amount:2000,        cat:'save',   tag:'save',   note:'', icon:'📈' },
+  { id:'cc_red',   name:'บัตร Central (แดง)',     amount:0,           cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
+  { id:'cc_fc',    name:'บัตร First Choice',      amount:0,           cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
+  { id:'cc_hp',    name:'บัตร HomePro',           amount:0,           cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
+  { id:'cc_gray',  name:'บัตร Central (เทา)',     amount:0,           cat:'credit', tag:'credit', note:'', icon:'💳', isCredit:true },
 ];
 
-const TOTAL_FIX = expenses.filter(e=>!e.isCredit).reduce((s,e)=>s+e.amount, 0);
-const NET_BASE = TOTAL_INCOME - TOTAL_FIX;
-
-let currentMonth = new Date().getMonth();
+// ═══════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════
+let currentMonth    = new Date().getMonth();
 let currentLogMonth = new Date().getMonth();
-let paidStatus = {};
-let logs = {};
-let creditAmounts = {};
-let notes = [];
-let aiaKept   = { total: 0, months: {} };
-let momKept   = { total: 0, months: {} };
-let selfKept  = { total: 0, months: {} };
-let keptExtras = [];
+let paidStatus = {}, logs = {}, creditAmounts = {}, notes = [], keptExtras = [];
+let aiaKept  = { total:0, months:{} };
+let momKept  = { total:0, months:{} };
+let selfKept = { total:0, months:{} };
 
-// ── Firebase (loaded via compat CDN — ไม่ต้องใช้ import) ────
+// ═══════════════════════════════════════════════
+//  FIREBASE + LOCAL STORAGE
+// ═══════════════════════════════════════════════
 const firebaseConfig = {
   apiKey: "AIzaSyAXt_cX8VvcYhA1nZJWR7rEByFoZCg8X48",
   authDomain: "my-budget-9aa20.firebaseapp.com",
@@ -419,484 +421,471 @@ const firebaseConfig = {
   appId: "1:692201225184:web:4b4461a2aaedb508f78985"
 };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
+// Firebase optional — ถ้าโหลดไม่ได้ (เปิดไฟล์ local) ใช้ localStorage แทน
+let db = null;
 const DB_KEY = 'budget_data';
+try {
+  if (typeof firebase !== 'undefined') {
+    firebase.initializeApp(firebaseConfig);
+    db = firebase.database();
+  }
+} catch(e) { db = null; }
+
+function getPayload() {
+  return { paidStatus, logs, creditAmounts, notes, aiaKept, momKept, selfKept, keptExtras };
+}
+function applyPayload(d) {
+  if (!d) return;
+  paidStatus    = d.paidStatus    || {};
+  logs          = d.logs          || {};
+  creditAmounts = d.creditAmounts || {};
+  notes         = Array.isArray(d.notes) ? d.notes : [];
+  aiaKept       = d.aiaKept       || { total:0, months:{} };
+  momKept       = d.momKept       || { total:0, months:{} };
+  selfKept      = d.selfKept      || { total:0, months:{} };
+  keptExtras    = Array.isArray(d.keptExtras) ? d.keptExtras : [];
+}
+function saveLocal() {
+  try { localStorage.setItem('bud_local', JSON.stringify(getPayload())); } catch(e) {}
+}
+function loadLocal() {
+  try { const d = localStorage.getItem('bud_local'); return d ? JSON.parse(d) : null; } catch(e) { return null; }
+}
 
 let _saveTimer = null;
 function saveData() {
+  saveLocal();
   clearTimeout(_saveTimer);
   _saveTimer = setTimeout(() => {
-    const payload = { paidStatus, logs, creditAmounts, notes, aiaKept, momKept, selfKept, keptExtras };
-    db.ref(DB_KEY).set(payload).catch(err => console.error('Firebase save error:', err));
+    db.ref(DB_KEY).set(getPayload()).catch(() => {});
   }, 800);
 }
 
 function loadData() {
-  document.getElementById('loadingOverlay').style.display = 'flex';
-  db.ref(DB_KEY).on('value', (snapshot) => {
-    const data = snapshot.val();
-    if (data) {
-      paidStatus    = data.paidStatus    || {};
-      logs          = data.logs          || {};
-      creditAmounts = data.creditAmounts || {};
-      notes         = data.notes         || [];
-      aiaKept       = data.aiaKept       || { total: 0, months: {} };
-      momKept       = data.momKept       || { total: 0, months: {} };
-      selfKept      = data.selfKept      || { total: 0, months: {} };
-      keptExtras    = data.keptExtras    || [];
-    }
-    document.getElementById('loadingOverlay').style.display = 'none';
-    renderTracker();
-    renderKeptCard();
-  }, { onlyOnce: false }); // real-time sync
+  // แสดงผลจาก local ทันที ไม่รอ Firebase
+  applyPayload(loadLocal());
+  document.getElementById('loadingOverlay').style.display = 'none';
+  renderAll();
+  // sync Firebase ใน background
+  db.ref(DB_KEY).on('value', snap => {
+    const d = snap.val();
+    if (d) { applyPayload(d); saveLocal(); renderAll(); }
+  }, () => {}); // ถ้า Firebase ล้มเหลว ไม่ทำอะไร
 }
 
+function renderAll() {
+  renderTracker();
+  renderKeptCard();
+}
+
+// ═══════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════
+function fmt(n) { return '฿' + Math.round(n).toLocaleString('th-TH'); }
+function fmtDec(n) { return '฿' + n.toLocaleString('th-TH', { minimumFractionDigits: n%1?2:0, maximumFractionDigits:2 }); }
+function escapeHtml(t) { return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function monthKey(m) { return '2026_' + m; }
-function isPaid(m, id) { return !!(paidStatus[monthKey(m) + '_' + id]); }
+function isPaid(m, id) { return !!(paidStatus[monthKey(m)+'_'+id]); }
+function getCreditAmt(m, id) { return parseFloat(creditAmounts[monthKey(m)+'_'+id] || 0) || 0; }
+// สำหรับรายการที่แก้ยอดได้ (เช่น ค่าคอนโด) — ถ้าไม่ได้แก้จะใช้ default
+function getCustomAmt(m, id, defaultAmt) {
+  const v = creditAmounts[monthKey(m)+'_custom_'+id];
+  return (v !== undefined && v !== '') ? parseFloat(v) : defaultAmt;
+}
+function setCustomAmt(m, id, val, defaultAmt) {
+  const v = parseFloat(val);
+  if (isNaN(v) || v === defaultAmt) {
+    delete creditAmounts[monthKey(m)+'_custom_'+id]; // ลบออกถ้าเท่ากับ default
+  } else {
+    creditAmounts[monthKey(m)+'_custom_'+id] = v;
+  }
+  saveData();
+  updateSummary(m);
+}
+
+function buildTabs(containerId, active, onSelect) {
+  const wrap = document.getElementById(containerId);
+  wrap.innerHTML = '';
+  MONTHS.forEach((name, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'month-tab' + (i===active?' active':'');
+    btn.textContent = name;
+    btn.onclick = () => onSelect(i);
+    wrap.appendChild(btn);
+  });
+  setTimeout(() => {
+    const a = wrap.querySelector('.active');
+    if (a) a.scrollIntoView({ block:'nearest', inline:'center' });
+  }, 50);
+}
+
+// ═══════════════════════════════════════════════
+//  TRACKER
+// ═══════════════════════════════════════════════
+const SAVE_CATS = new Set(['save','aia']);
 
 function toggleKeptStore(store, monthly, wasOn, mk) {
   if (!wasOn) {
-    if (!store.months[mk]) { store.total = (store.total || 0) + monthly; store.months[mk] = true; }
+    if (!store.months[mk]) { store.total = (store.total||0) + monthly; store.months[mk] = true; }
   } else {
-    if (store.months[mk]) { store.total = Math.max(0, (store.total || 0) - monthly); delete store.months[mk]; }
+    if (store.months[mk]) { store.total = Math.max(0,(store.total||0)-monthly); delete store.months[mk]; }
   }
 }
 
 function togglePaid(m, id, divEl) {
-  const k = monthKey(m) + '_' + id;
+  const k = monthKey(m)+'_'+id;
   const wasOn = !!paidStatus[k];
   paidStatus[k] = !wasOn;
-  const mk = 'y2026_m' + m;
-
-  if (id === 'aia')     toggleKeptStore(aiaKept,  AIA_MONTHLY,     wasOn, mk);
-  if (id === 'mom_ins') toggleKeptStore(momKept,  MOM_INS_MONTHLY, wasOn, mk);
-  if (id === 'self')    toggleKeptStore(selfKept, SELF_MONTHLY,    wasOn, mk);
-
+  const mk = 'y2026_m'+m;
+  if (id==='aia')     toggleKeptStore(aiaKept,  AIA_MONTHLY,     wasOn, mk);
+  if (id==='mom_ins') toggleKeptStore(momKept,  MOM_INS_MONTHLY, wasOn, mk);
+  if (id==='self')    toggleKeptStore(selfKept, SELF_MONTHLY,    wasOn, mk);
+  // อัปเดต DOM เฉพาะ item ที่กด (ไม่ re-render ทั้งหน้า = ไม่ scroll)
   const paid = isPaid(m, id);
-  const e = expenses.find(ex => ex.id === id);
+  const e = expenses.find(ex => ex.id===id);
   divEl.classList.toggle('is-done', paid);
   const circle = divEl.querySelector('.check-circle');
-  if (circle) circle.textContent = paid ? '✓' : (e.cat === 'save' ? '🏦' : e.cat === 'aia' ? '🔒' : e.cat === 'credit' ? '💳' : '');
+  if (circle) circle.textContent = paid ? '✓' : (e.cat==='save'?'🏦':e.cat==='aia'?'🔒':e.cat==='credit'?'💳':'');
   saveData();
   updateSummary(m);
   renderKeptCard();
 }
 
+function setCreditAmt(m, id, val) {
+  creditAmounts[monthKey(m)+'_'+id] = parseFloat(val)||0;
+  saveData();
+  updateSummary(m); // อัปเดตแค่ summary ไม่ render ทั้งหน้า
+}
+
 function updateSummary(m) {
-  const saveCats = new Set(['save','aia']);
-  let paidAmt = 0, unpaidAmt = 0, savedAmt = 0, paidCnt = 0;
+  let paidAmt=0, unpaidAmt=0, savedAmt=0, paidCnt=0;
   const total = expenses.length;
   expenses.forEach(e => {
     const paid = isPaid(m, e.id);
-    const amt = e.isCredit ? getCreditAmt(m, e.id) : e.amount;
-    const isSaving = saveCats.has(e.cat);
-    if (paid) {
-      paidCnt++;
-      if (isSaving) savedAmt += amt; else paidAmt += amt;
-    } else {
-      if (!isSaving) unpaidAmt += amt;
-    }
+    const amt = e.isCredit ? getCreditAmt(m,e.id) : e.isEditable ? getCustomAmt(m,e.id,e.amount) : e.amount;
+    if (paid) { paidCnt++; SAVE_CATS.has(e.cat) ? savedAmt+=amt : paidAmt+=amt; }
+    else if (!SAVE_CATS.has(e.cat)) unpaidAmt+=amt;
   });
-  const totalAmt = expenses.reduce((s, e) => s + (e.isCredit ? getCreditAmt(m, e.id) : e.amount), 0);
-  document.getElementById('paidTotal').textContent = fmt(paidAmt);
+  const totalAmt = expenses.reduce((s,e)=>{
+    if (e.isCredit) return s+getCreditAmt(m,e.id);
+    if (e.isEditable) return s+getCustomAmt(m,e.id,e.amount);
+    return s+e.amount;
+  },0);
+  document.getElementById('paidTotal').textContent   = fmt(paidAmt);
   document.getElementById('unpaidTotal').textContent = fmt(unpaidAmt);
-  document.getElementById('savedTotal').textContent = fmt(savedAmt);
-  document.getElementById('remainAmt').textContent = fmt(TOTAL_INCOME - paidAmt - unpaidAmt - savedAmt);
-  document.getElementById('paidCnt').textContent = paidCnt;
-  document.getElementById('totalCnt').textContent = total;
-  document.getElementById('progFill').style.width = (total ? Math.round(paidCnt / total * 100) : 0) + '%';
-  document.getElementById('netRemain').textContent = fmt(TOTAL_INCOME - totalAmt);
+  document.getElementById('savedTotal').textContent  = fmt(savedAmt);
+  document.getElementById('remainAmt').textContent   = fmt(TOTAL_INCOME-paidAmt-unpaidAmt-savedAmt);
+  document.getElementById('paidCnt').textContent     = paidCnt;
+  document.getElementById('totalCnt').textContent    = total;
+  document.getElementById('progFill').style.width    = (total?Math.round(paidCnt/total*100):0)+'%';
+  document.getElementById('netRemain').textContent   = fmt(TOTAL_INCOME-totalAmt);
 }
 
-// Kept รายการ fixed ที่โอนเข้า Kept ทุกเดือน
+function renderTracker() {
+  const m = currentMonth;
+  buildTabs('monthTabs', m, i => { currentMonth=i; renderTracker(); renderKeptCard(); });
+  const list = document.getElementById('expenseList');
+  list.innerHTML = '';
+  const cats = [
+    { key:'fix',    label:'💳 Fix Cost — รายจ่ายประจำ' },
+    { key:'save',   label:'🏦 ออมเงิน / คืนตัวเอง' },
+    { key:'credit', label:'💳 บัตรเครดิต' },
+  ];
+  cats.forEach(cat => {
+    const items = expenses.filter(e=>e.cat===cat.key);
+    if (!items.length) return;
+    const lbl = document.createElement('div');
+    lbl.className = 'cat-label'; lbl.textContent = cat.label;
+    list.appendChild(lbl);
+    items.forEach(e => {
+      const paid = isPaid(m, e.id);
+      const div = document.createElement('div');
+      let cls = 'expense-item';
+      if (e.cat==='save')   cls+=' is-save';
+      if (e.cat==='aia')    cls+=' is-aia';
+      if (e.cat==='credit') cls+=' is-credit';
+      if (paid)             cls+=' is-done';
+      div.className = cls;
+      div.dataset.id = e.id;
+      const checkIcon = paid?'✓':(e.cat==='save'?'🏦':e.cat==='aia'?'🔒':e.cat==='credit'?'💳':'');
+      let extra = '';
+      if (e.isCredit) {
+        const cur=getCreditAmt(m,e.id);
+        extra=`<div class="credit-amt-row" onclick="event.stopPropagation()">
+          <span class="credit-label">ยอดเดือนนี้:</span>
+          <input class="credit-input" type="number" min="0" value="${cur||''}" placeholder="0"
+            onchange="setCreditAmt(${m},'${e.id}',this.value)" onfocus="this.select()">
+        </div>`;
+      }
+      if (e.isEditable) {
+        const cur = getCustomAmt(m, e.id, e.amount);
+        const changed = cur !== e.amount;
+        extra=`<div class="credit-amt-row" onclick="event.stopPropagation()">
+          <span class="credit-label">ยอดเดือนนี้:</span>
+          <input class="credit-input" type="number" min="0" value="${cur}" placeholder="${e.amount}"
+            onchange="setCustomAmt(${m},'${e.id}',this.value,${e.amount})" onfocus="this.select()"
+            style="${changed?'border-color:#f59e0b;color:#92400e':''}">
+        </div>`;
+      }
+      const actualAmt = e.isEditable ? getCustomAmt(m, e.id, e.amount) : (e.isCredit ? getCreditAmt(m,e.id) : e.amount);
+      const amtDisplay = e.isCredit
+        ? (getCreditAmt(m,e.id)>0 ? fmtDec(getCreditAmt(m,e.id)) : '<span style="color:var(--muted);font-size:0.78rem">กรอกยอด</span>')
+        : fmtDec(actualAmt);
+      div.innerHTML=`
+        <div class="check-circle">${checkIcon}</div>
+        <div class="item-info">
+          <div class="item-name">${e.icon} ${e.name}</div>
+          ${e.note?`<div class="item-note">📌 ${e.note}</div>`:''}
+          <span class="tag ${e.tag}">${{fix:'ประจำ',save:'ออม',refund:'คืนตัวเอง',aia:'Kept',credit:'บัตร'}[e.tag]||''}</span>
+          ${extra}
+        </div>
+        <div class="item-amount ${e.isCredit&&!getCreditAmt(m,e.id)?'variable':''}">${amtDisplay}</div>`;
+      div.onclick = ev => {
+        if (ev.target.tagName==='INPUT') return;
+        div.classList.add('popping');
+        setTimeout(()=>div.classList.remove('popping'),300);
+        togglePaid(m, e.id, div);
+      };
+      list.appendChild(div);
+    });
+  });
+  updateSummary(m);
+}
+
+// ═══════════════════════════════════════════════
+//  KEPT CARD
+// ═══════════════════════════════════════════════
 const KEPT_FIXED = [
-  { id:'aia',     name:'🔐 ประกัน AIA (ตัวเอง)', monthly: AIA_MONTHLY,     annual: AIA_ANNUAL,   store: ()=>aiaKept,  note:'จ่ายธ.ค.ทุกปี' },
-  { id:'mom_ins', name:'🛡️ ประกันแม่',            monthly: MOM_INS_MONTHLY, annual: MOM_INS_ANNUAL,store: ()=>momKept,  note:'จ่ายธ.ค.ทุกปี' },
-  { id:'self',    name:'💎 ออมคืนตัวเอง',         monthly: SELF_MONTHLY,    annual: SELF_TARGET,  store: ()=>selfKept, note:'ถึงมิ.ย. 2569 เหลืออีก 3 เดือน' },
+  { id:'aia',     name:'🔐 ประกัน AIA (ตัวเอง)', monthly:AIA_MONTHLY,     annual:AIA_ANNUAL,    store:()=>aiaKept,  color:'#f59e0b', note:'จ่ายธ.ค.ทุกปี' },
+  { id:'mom_ins', name:'🛡️ ประกันแม่',            monthly:MOM_INS_MONTHLY, annual:MOM_INS_ANNUAL, store:()=>momKept,  color:'#10b981', note:'จ่ายธ.ค.ทุกปี' },
+  { id:'self',    name:'💎 ออมคืนตัวเอง',         monthly:SELF_MONTHLY,    annual:SELF_TARGET,   store:()=>selfKept, color:'#6366f1', note:'ถึงมิ.ย. 2026 เหลืออีก 3 เดือน' },
 ];
 
 function addKeptExtra() {
-  const nameEl = document.getElementById('keptExtraName');
-  const amtEl  = document.getElementById('keptExtraAmt');
-  const name   = nameEl.value.trim();
-  const amount = parseFloat(amtEl.value) || 0;
-  if (!name || !amount) return;
-  keptExtras.push({ id: Date.now(), name, amount });
-  nameEl.value = ''; amtEl.value = '';
-  saveData();
-  renderKeptCard();
+  const n = document.getElementById('keptExtraName');
+  const a = document.getElementById('keptExtraAmt');
+  const name=n.value.trim(), amount=parseFloat(a.value)||0;
+  if (!name||!amount) return;
+  keptExtras.push({ id:Date.now(), name, amount });
+  n.value=''; a.value='';
+  saveData(); renderKeptCard();
 }
-
 function delKeptExtra(id) {
-  keptExtras = keptExtras.filter(k => k.id !== id);
-  saveData();
-  renderKeptCard();
-}
-
-function keptProgressBar(saved, target, color) {
-  const pct = Math.min(100, Math.round(saved / target * 100));
-  return `<div class="kept-bar-wrap" style="margin:6px 0 2px">
-    <div class="kept-bar-fill" style="width:${pct}%;background:${color}"></div>
-  </div>
-  <div style="font-size:0.65rem;color:#b45309;text-align:right">${fmt(saved)} / ${fmt(target)} (${pct}%)</div>`;
+  keptExtras = keptExtras.filter(k=>k.id!==id);
+  saveData(); renderKeptCard();
 }
 
 function renderKeptCard() {
-  const container = document.getElementById('keptCard');
-  const fixedTotal = KEPT_FIXED.reduce((s, k) => s + k.monthly, 0);
-  const extraTotal = keptExtras.reduce((s, k) => s + k.amount, 0);
-  const grandTotal = fixedTotal + extraTotal;
+  const c = document.getElementById('keptCard');
+  if (!c) return;
+  const m = currentMonth;
+  const grandTotal = KEPT_FIXED.reduce((s,k)=>s+k.monthly,0) + keptExtras.reduce((s,k)=>s+k.amount,0);
 
-  const fixedRows = KEPT_FIXED.map(k => {
-    const store = k.store();
-    const saved = store.total || 0;
-    const colors = { aia:'#f59e0b', mom_ins:'#10b981', self:'#6366f1' };
+  const rows = KEPT_FIXED.map(k => {
+    const sv = k.store().total || 0;
+    const pct = Math.min(100, Math.round(sv / k.annual * 100));
+    const paid = isPaid(m, k.id);
     return `<div class="kept-item-row" style="flex-direction:column;align-items:stretch;gap:4px;padding:10px 0">
-      <div style="display:flex;justify-content:space-between;align-items:center">
-        <span class="kept-item-name" style="font-weight:600">${k.name}</span>
-        <span class="kept-item-amt">${fmt(k.monthly)}<span style="font-size:0.65rem;color:#b45309">/เดือน</span></span>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px;flex:1">
+          <button onclick="toggleKeptFromCard('${k.id}')"
+            style="flex-shrink:0;width:28px;height:28px;border-radius:50%;border:2.5px solid ${paid?'#4caf82':'#e2d9ce'};
+            background:${paid?'#4caf82':'#f0ebe4'};color:white;font-size:13px;cursor:pointer;
+            display:flex;align-items:center;justify-content:center;transition:all 0.2s">
+            ${paid?'✓':''}
+          </button>
+          <div>
+            <div style="font-size:0.85rem;font-weight:600;color:${paid?'#4caf82':'var(--text)'}">${k.name}</div>
+            <div style="font-size:0.68rem;color:#b45309">📌 ${k.note}</div>
+          </div>
+        </div>
+        <span class="kept-item-amt" style="color:${paid?'#4caf82':'#92400e'}">${fmt(k.monthly)}<span style="font-size:0.65rem;color:#b45309">/เดือน</span></span>
       </div>
-      <div style="font-size:0.68rem;color:#b45309">📌 ${k.note}</div>
-      ${keptProgressBar(saved, k.annual, colors[k.id])}
+      <div class="kept-bar-wrap" style="margin:4px 0 2px"><div class="kept-bar-fill" style="width:${pct}%;background:${k.color}"></div></div>
+      <div style="font-size:0.65rem;color:#b45309;text-align:right">${fmt(sv)} / ${fmt(k.annual)} (${pct}%)</div>
     </div>`;
   }).join('');
 
-  const extraRows = keptExtras.length ? keptExtras.map(k => `
+  const extras = keptExtras.map(k=>`
     <div class="kept-item-row">
       <span class="kept-item-name">${escapeHtml(k.name)}</span>
       <div style="display:flex;align-items:center;gap:8px">
         <span class="kept-item-amt">${fmt(k.amount)}</span>
         <button class="kept-del-btn" onclick="delKeptExtra(${k.id})">×</button>
       </div>
-    </div>`).join('') : '';
+    </div>`).join('');
 
-  container.innerHTML = `
-    <div class="kept-card">
-      <div class="kept-card-header">
-        <div>
-          <div class="kept-card-title">🔒 ยอดโอนเข้า Kept เดือนนี้</div>
-          <div class="kept-card-sub">กดมาร์คในรายจ่ายเพื่ออัปเดต progress</div>
-        </div>
-        <div class="kept-total-box">
-          <div class="kept-total-label">รวมโอน/เดือน</div>
-          <div class="kept-total-val">${fmt(grandTotal)}</div>
-        </div>
-      </div>
-      ${fixedRows}
-      ${extraRows ? `<div style="border-top:1px dashed #f6d860;margin-top:4px;padding-top:4px">${extraRows}</div>` : ''}
-      <div class="kept-add-form">
-        <input id="keptExtraName" type="text" placeholder="เพิ่มรายการ Kept อื่นๆ" />
-        <input id="keptExtraAmt" type="number" class="kept-amt-input" placeholder="฿" min="0" />
-        <button class="kept-add-btn" onclick="addKeptExtra()">+ เพิ่ม</button>
-      </div>
-    </div>`;
+  c.innerHTML=`<div class="kept-card">
+    <div class="kept-card-header">
+      <div><div class="kept-card-title">🔒 ยอดโอนเข้า Kept เดือนนี้</div>
+      <div class="kept-card-sub">กดวงกลมเพื่อมาร์คว่าโอนแล้ว</div></div>
+      <div class="kept-total-box"><div class="kept-total-label">รวมโอน/เดือน</div>
+      <div class="kept-total-val">${fmt(grandTotal)}</div></div>
+    </div>
+    ${rows}
+    ${extras?`<div style="border-top:1px dashed #f6d860;margin-top:4px;padding-top:4px">${extras}</div>`:''}
+    <div class="kept-add-form">
+      <input id="keptExtraName" type="text" placeholder="เพิ่มรายการ Kept อื่นๆ"/>
+      <input id="keptExtraAmt" type="number" class="kept-amt-input" placeholder="฿" min="0"/>
+      <button class="kept-add-btn" onclick="addKeptExtra()">+ เพิ่ม</button>
+    </div>
+  </div>`;
 
-  const amtEl = document.getElementById('keptExtraAmt');
-  if (amtEl) amtEl.addEventListener('keydown', e => { if (e.key === 'Enter') addKeptExtra(); });
+  const ae=document.getElementById('keptExtraAmt');
+  if(ae) ae.onkeydown=e=>{ if(e.key==='Enter') addKeptExtra(); };
 }
 
-function fmt(n) {
-  return '฿' + Math.round(n).toLocaleString('th-TH');
-}
-
-function fmtDec(n) {
-  return '฿' + n.toLocaleString('th-TH', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
-}
-
-function buildTabs(containerId, active, onSelect) {
-  const wrap = document.getElementById(containerId);
-  wrap.innerHTML = '';
-  MONTHS.forEach((m, i) => {
-    const btn = document.createElement('button');
-    btn.className = 'month-tab' + (i === active ? ' active' : '');
-    btn.textContent = m;
-    btn.onclick = () => onSelect(i);
-    wrap.appendChild(btn);
-  });
-  // scroll active into view
-  setTimeout(() => {
-    const activeBtn = wrap.querySelector('.active');
-    if (activeBtn) activeBtn.scrollIntoView({ block: 'nearest', inline: 'center' });
-  }, 50);
-}
-
-function getCreditAmt(m, id) {
-  return parseFloat(creditAmounts[monthKey(m) + '_' + id] || 0) || 0;
-}
-
-function setCreditAmt(m, id, val) {
-  creditAmounts[monthKey(m) + '_' + id] = parseFloat(val) || 0;
-  saveData();
-  renderTracker();
-}
-
-function renderTracker() {
-  const scrollY = window.scrollY;
+function toggleKeptFromCard(id) {
   const m = currentMonth;
-  buildTabs('monthTabs', m, i => { currentMonth = i; renderTracker(); });
-  renderKeptCard();
-
-  const list = document.getElementById('expenseList');
-  list.innerHTML = '';
-
-  const cats = [
-    { key: 'fix',    label: '💳 Fix Cost — รายจ่ายประจำ' },
-    { key: 'aia',    label: '🛡️ ประกัน AIA — เก็บเข้า Kept' },
-    { key: 'save',   label: '🏦 ออมเงิน / คืนตัวเอง' },
-    { key: 'credit', label: '💳 บัตรเครดิต' },
-  ];
-
-  let paidAmt = 0, unpaidAmt = 0, savedAmt = 0, paidCnt = 0;
-  const total = expenses.length;
-  // cats that count as "real expenses" vs "savings"
-  const saveCats = new Set(['save', 'aia']);
-
-  cats.forEach(cat => {
-    const items = expenses.filter(e => e.cat === cat.key);
-    if (!items.length) return;
-
-    const catDiv = document.createElement('div');
-    catDiv.className = 'cat-label';
-    catDiv.textContent = cat.label;
-    list.appendChild(catDiv);
-
-    items.forEach(e => {
-      const paid = isPaid(m, e.id);
-      const amt = e.isCredit ? getCreditAmt(m, e.id) : e.amount;
-      const isSaving = saveCats.has(e.cat);
-      if (paid) {
-        paidCnt++;
-        if (isSaving) { savedAmt += amt; }
-        else { paidAmt += amt; }
-      } else {
-        if (!isSaving) { unpaidAmt += amt; }
-      }
-
-      const div = document.createElement('div');
-      let extraClass = '';
-      if (e.cat === 'save') extraClass = ' is-save';
-      if (e.cat === 'aia') extraClass = ' is-aia';
-      if (e.cat === 'credit') extraClass = ' is-credit';
-      div.className = 'expense-item' + extraClass + (paid ? ' is-done' : '');
-
-      const checkIcon = paid ? '✓' : (e.cat === 'save' ? '🏦' : e.cat === 'aia' ? '🔒' : e.cat === 'credit' ? '💳' : '');
-
-      // AIA: show kept progress
-      let aiaExtra = '';
-      if (e.cat === 'aia') {
-        const saved = aiaKept.total || 0;
-        const pct = Math.min(100, Math.round(saved / AIA_ANNUAL * 100));
-        const left = Math.max(0, Math.round((AIA_ANNUAL - saved) / AIA_MONTHLY));
-        aiaExtra = `
-          <div class="aia-kept-bar"><div class="aia-kept-fill" style="width:${pct}%"></div></div>
-          <div class="aia-kept-label">Kept: ${fmt(saved)} / ${fmt(AIA_ANNUAL)} ${left > 0 ? '(เหลืออีก ~' + left + ' เดือน)' : '— ครบแล้ว! 🎉'}</div>`;
-      }
-
-      // Credit: show input
-      let creditExtra = '';
-      if (e.isCredit) {
-        const curAmt = getCreditAmt(m, e.id);
-        creditExtra = `
-          <div class="credit-amt-row" onclick="event.stopPropagation()">
-            <span class="credit-label">ยอดเดือนนี้:</span>
-            <input class="credit-input" type="number" min="0" value="${curAmt || ''}" placeholder="0"
-              onchange="setCreditAmt(${m},'${e.id}',this.value)"
-              onfocus="this.select()">
-          </div>`;
-      }
-
-      const amtDisplay = e.isCredit
-        ? (getCreditAmt(m, e.id) > 0 ? fmtDec(getCreditAmt(m, e.id)) : '<span style="color:var(--muted);font-size:0.78rem">กรอกยอด</span>')
-        : fmtDec(e.amount);
-
-      div.innerHTML = `
-        <div class="check-circle">${checkIcon}</div>
-        <div class="item-info">
-          <div class="item-name">${e.icon} ${e.name}</div>
-          ${e.note ? `<div class="item-note">📌 ${e.note}</div>` : ''}
-          <span class="tag ${e.tag}">${{fix:'ประจำ',save:'ออม',refund:'คืนตัวเอง',aia:'Kept',credit:'บัตร'}[e.tag] || ''}</span>
-          ${aiaExtra}
-          ${creditExtra}
-        </div>
-        <div class="item-amount ${e.isCredit && !getCreditAmt(m, e.id) ? 'variable' : ''}">${amtDisplay}</div>`;
-
-      div.onclick = (ev) => {
-        if (ev.target.tagName === 'INPUT') return;
-        div.classList.add('popping');
-        setTimeout(() => div.classList.remove('popping'), 300);
-        togglePaid(m, e.id, div);
-      };
-      list.appendChild(div);
-    });
-  });
-
-  const totalAmt = expenses.reduce((s, e) => {
-    if (e.isCredit) return s + getCreditAmt(m, e.id);
-    return s + e.amount;
-  }, 0);
-
+  const k = monthKey(m)+'_'+id;
+  const wasOn = !!paidStatus[k];
+  paidStatus[k] = !wasOn;
+  const mk = 'y2026_m'+m;
+  if (id==='aia')     toggleKeptStore(aiaKept,  AIA_MONTHLY,     wasOn, mk);
+  if (id==='mom_ins') toggleKeptStore(momKept,  MOM_INS_MONTHLY, wasOn, mk);
+  if (id==='self')    toggleKeptStore(selfKept, SELF_MONTHLY,    wasOn, mk);
+  // sync กับ item card ในหน้ารายจ่ายด้วย
+  const expDiv = document.querySelector(`[data-id="${id}"]`);
+  if (expDiv) {
+    const paid = isPaid(m, id);
+    expDiv.classList.toggle('is-done', paid);
+    const circle = expDiv.querySelector('.check-circle');
+    if (circle) circle.textContent = paid ? '✓' : (id==='aia'?'🔒':'🏦');
+  }
+  saveData();
   updateSummary(m);
-  document.getElementById('netRemain').textContent = fmt(TOTAL_INCOME - totalAmt);
+  renderKeptCard();
 }
 
-// LOG
-function getMonthLogs(m) { return logs[monthKey(m)] || []; }
+// ═══════════════════════════════════════════════
+//  LOG (ค่าขนม)
+// ═══════════════════════════════════════════════
+const CAT_LABELS = { food:'🍜 ค่าอาหาร', clothes:'👗 เสื้อผ้า/ของใช้', travel:'🚗 ค่าเดินทาง', other:'🛍️ อื่นๆ/เผื่อ' };
+let currentCat = 'food';
+
+function selectCat(cat) {
+  currentCat = cat;
+  document.querySelectorAll('.cat-btn').forEach(b => b.classList.toggle('active', b.dataset.cat===cat));
+}
 
 function addLog() {
-  const desc = document.getElementById('logDesc').value.trim();
-  const amt = parseFloat(document.getElementById('logAmt').value);
-  if (!desc || !amt || amt <= 0) { alert('กรุณากรอกรายการและจำนวนเงินค่ะ'); return; }
-  const m = currentLogMonth;
-  if (!logs[monthKey(m)]) logs[monthKey(m)] = [];
-  logs[monthKey(m)].push({
-    id: Date.now(), desc, amt,
-    date: new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short' })
-  });
-  document.getElementById('logDesc').value = '';
-  document.getElementById('logAmt').value = '';
-  saveData();
-  renderLog();
+  const desc=document.getElementById('logDesc').value.trim();
+  const amt=parseFloat(document.getElementById('logAmt').value);
+  if (!desc||!amt||amt<=0) { alert('กรุณากรอกรายการและจำนวนเงินค่ะ'); return; }
+  const m=currentLogMonth;
+  if (!logs[monthKey(m)]) logs[monthKey(m)]=[];
+  logs[monthKey(m)].push({ id:Date.now(), desc, amt, cat:currentCat,
+    date:new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short'}) });
+  document.getElementById('logDesc').value='';
+  document.getElementById('logAmt').value='';
+  saveData(); renderLog();
 }
-
 function delLog(m, id) {
   if (!logs[monthKey(m)]) return;
-  logs[monthKey(m)] = logs[monthKey(m)].filter(l => l.id !== id);
-  saveData();
-  renderLog();
+  logs[monthKey(m)]=logs[monthKey(m)].filter(l=>l.id!==id);
+  saveData(); renderLog();
 }
-
 function renderLog() {
-  const m = currentLogMonth;
-  buildTabs('monthTabs2', m, i => { currentLogMonth = i; renderLog(); });
-
-  const items = getMonthLogs(m);
-  const used = items.reduce((s, l) => s + l.amt, 0);
-  const left = KANOM_BUDGET - used;
-  const pct = Math.min(100, Math.round(used / KANOM_BUDGET * 100));
-
-  document.getElementById('logUsed').textContent = fmt(used);
-  document.getElementById('logLeft').textContent = fmt(Math.max(0, left));
-  const fill = document.getElementById('logProgress');
-  fill.style.width = pct + '%';
-  fill.className = 'progress-fill' + (pct >= 100 ? ' over' : pct >= 80 ? ' warn' : '');
-
-  const listEl = document.getElementById('logList');
-  if (!items.length) {
-    listEl.innerHTML = '<div class="empty-log">ยังไม่มีรายการ<br>กดเพิ่มรายการด้านบนได้เลยค่ะ</div>';
-    return;
-  }
-  listEl.innerHTML = '';
-  [...items].reverse().forEach(l => {
-    const div = document.createElement('div');
-    div.className = 'log-item';
-    div.innerHTML = `
-      <button class="log-del" onclick="delLog(${m},${l.id})">×</button>
+  const m=currentLogMonth;
+  buildTabs('monthTabs2', m, i=>{ currentLogMonth=i; renderLog(); });
+  const items=logs[monthKey(m)]||[];
+  const used=items.reduce((s,l)=>s+l.amt,0);
+  const pct=Math.min(100,Math.round(used/KANOM_BUDGET*100));
+  document.getElementById('logUsed').textContent=fmt(used);
+  document.getElementById('logLeft').textContent=fmt(Math.max(0,KANOM_BUDGET-used));
+  const fill=document.getElementById('logProgress');
+  fill.style.width=pct+'%';
+  fill.className='progress-fill'+(pct>=100?' over':pct>=80?' warn':'');
+  const el=document.getElementById('logList');
+  if (!items.length) { el.innerHTML='<div class="empty-log">ยังไม่มีรายการ<br>กดเพิ่มรายการด้านบนได้เลยค่ะ</div>'; return; }
+  el.innerHTML='';
+  [...items].reverse().forEach(l=>{
+    const cat = l.cat||'other';
+    const catLabel = CAT_LABELS[cat]||CAT_LABELS.other;
+    const d=document.createElement('div');
+    d.className='log-item';
+    d.innerHTML=`<button class="log-del" onclick="delLog(${m},${l.id})">×</button>
       <div class="log-desc">
-        <div>${l.desc}</div>
-        <div class="log-date">${l.date}</div>
+        <div>${escapeHtml(l.desc)}</div>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px">
+          <span class="log-cat-tag ${cat}">${catLabel}</span>
+          <span class="log-date">${l.date}</span>
+        </div>
       </div>
       <div class="log-amt">-${fmt(l.amt)}</div>`;
-    listEl.appendChild(div);
+    el.appendChild(d);
   });
 }
 
-// NOTES
+// ═══════════════════════════════════════════════
+//  NOTES
+// ═══════════════════════════════════════════════
 function addNote() {
-  const text = document.getElementById('noteText').value.trim();
-  if (!text) { alert('กรุณาเขียนโน้ตก่อนนะคะ'); return; }
-  const pinned = document.getElementById('notePin').checked;
-  notes.unshift({
-    id: Date.now(),
-    text,
-    pinned,
-    date: new Date().toLocaleDateString('th-TH', { day: 'numeric', month: 'short', year: '2-digit' })
-  });
-  document.getElementById('noteText').value = '';
-  document.getElementById('notePin').checked = false;
-  saveData();
-  renderNotes();
+  const text=document.getElementById('noteText').value.trim();
+  if (!text) return;
+  const pinned=document.getElementById('notePin').checked;
+  notes.unshift({ id:Date.now(), text, pinned,
+    date:new Date().toLocaleDateString('th-TH',{day:'numeric',month:'short',year:'2-digit'}) });
+  document.getElementById('noteText').value='';
+  document.getElementById('notePin').checked=false;
+  saveData(); renderNotes();
 }
-
 function toggleNotePin(id) {
-  const note = notes.find(n => n.id === id);
-  if (note) note.pinned = !note.pinned;
-  saveData();
-  renderNotes();
+  const n=notes.find(n=>n.id===id);
+  if(n) n.pinned=!n.pinned;
+  saveData(); renderNotes();
 }
-
 function delNote(id) {
-  notes = notes.filter(n => n.id !== id);
-  saveData();
-  renderNotes();
+  notes=notes.filter(n=>n.id!==id);
+  saveData(); renderNotes();
 }
-
 function renderNotes() {
-  const container = document.getElementById('notesList');
-  if (!notes.length) {
-    container.innerHTML = '<div class="note-empty">ยังไม่มีโน้ต<br>บันทึกอะไรก็ได้ที่อยากจำ 💛</div>';
-    return;
-  }
-
-  const pinned = notes.filter(n => n.pinned);
-  const unpinned = notes.filter(n => !n.pinned);
-
-  container.innerHTML = '';
-
+  const c=document.getElementById('notesList');
+  if (!notes.length) { c.innerHTML='<div class="note-empty">ยังไม่มีโน้ต<br>บันทึกอะไรก็ได้ที่อยากจำ 💛</div>'; return; }
+  const pinned=notes.filter(n=>n.pinned), unpinned=notes.filter(n=>!n.pinned);
+  c.innerHTML='';
   if (pinned.length) {
-    const lbl = document.createElement('div');
-    lbl.className = 'note-section-label';
-    lbl.textContent = '📌 ปักหมุด';
-    container.appendChild(lbl);
-    pinned.forEach(n => container.appendChild(buildNoteCard(n)));
+    const l=document.createElement('div'); l.className='note-section-label'; l.textContent='📌 ปักหมุด'; c.appendChild(l);
+    pinned.forEach(n=>c.appendChild(buildNoteCard(n)));
   }
-
   if (unpinned.length) {
-    const lbl = document.createElement('div');
-    lbl.className = 'note-section-label';
-    lbl.textContent = '📋 บันทึกทั้งหมด';
-    container.appendChild(lbl);
-    unpinned.forEach(n => container.appendChild(buildNoteCard(n)));
+    const l=document.createElement('div'); l.className='note-section-label'; l.textContent='📋 บันทึกทั้งหมด'; c.appendChild(l);
+    unpinned.forEach(n=>c.appendChild(buildNoteCard(n)));
   }
 }
-
 function buildNoteCard(n) {
-  const div = document.createElement('div');
-  div.className = 'note-card' + (n.pinned ? ' pinned' : '');
-  div.innerHTML = `
-    <div class="note-card-top">
-      ${n.pinned ? '<span class="note-pin-icon">📌</span>' : ''}
-      <div class="note-text">${escapeHtml(n.text)}</div>
-    </div>
-    <div class="note-card-bottom">
-      <span class="note-date">${n.date}</span>
-      <div class="note-actions">
-        <button class="note-btn" onclick="toggleNotePin(${n.id})">${n.pinned ? 'เอาออก' : 'ปักหมุด'}</button>
-        <button class="note-btn del" onclick="delNote(${n.id})">ลบ</button>
-      </div>
-    </div>`;
-  return div;
+  const d=document.createElement('div');
+  d.className='note-card'+(n.pinned?' pinned':'');
+  d.innerHTML=`<div class="note-card-top">${n.pinned?'<span class="note-pin-icon">📌</span>':''}
+    <div class="note-text">${escapeHtml(n.text)}</div></div>
+    <div class="note-card-bottom"><span class="note-date">${n.date}</span>
+    <div class="note-actions">
+      <button class="note-btn" onclick="toggleNotePin(${n.id})">${n.pinned?'เอาออก':'ปักหมุด'}</button>
+      <button class="note-btn del" onclick="delNote(${n.id})">ลบ</button>
+    </div></div>`;
+  return d;
 }
 
-function escapeHtml(t) {
-  return t.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-
+// ═══════════════════════════════════════════════
+//  NAV
+// ═══════════════════════════════════════════════
 function switchPage(page) {
-  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-  document.getElementById('page-' + page).classList.add('active');
-  const idx = { tracker: 0, log: 1, notes: 2 }[page];
-  document.querySelectorAll('.nav-tab')[idx].classList.add('active');
-  if (page === 'log') renderLog();
-  if (page === 'notes') renderNotes();
+  document.querySelectorAll('.page').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('page-'+page).classList.add('active');
+  document.querySelectorAll('.nav-tab')[{tracker:0,log:1,notes:2}[page]].classList.add('active');
+  if (page==='log')   renderLog();
+  if (page==='notes') renderNotes();
 }
 
-document.getElementById('logAmt').addEventListener('keydown', e => { if (e.key === 'Enter') addLog(); });
-document.getElementById('logDesc').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('logAmt').focus(); });
-document.getElementById('noteText').addEventListener('keydown', e => { if (e.key === 'Enter' && e.ctrlKey) addNote(); });
+// ═══════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════
+document.getElementById('logAmt').addEventListener('keydown',  e=>{ if(e.key==='Enter') addLog(); });
+document.getElementById('logDesc').addEventListener('keydown', e=>{ if(e.key==='Enter') document.getElementById('logAmt').focus(); });
+document.getElementById('noteText').addEventListener('keydown',e=>{ if(e.key==='Enter'&&e.ctrlKey) addNote(); });
 
-loadData(); // Firebase onValue จะ render ให้อัตโนมัติ
+loadData();
 </script>
 </body>
 </html>
